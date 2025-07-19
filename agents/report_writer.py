@@ -1,187 +1,74 @@
-from docx import Document
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-from docx.shared import Pt
-from datetime import datetime
 import os
-import random
-import re
-import google.generativeai as genai
+import importlib.util
+from dotenv import load_dotenv
+import wikipedia
+from agents.disambiguator_agent import disambiguate_topic
 
-# Configure Gemini
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-llm = genai.GenerativeModel("gemini-2.0-pro")
+# Load environment variables
+load_dotenv()
 
-def remove_bold_markdown(text):
-    """Removes **bold markdown** without removing content."""
-    return re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+# Dynamically load agent modules
+def load_agent_module(name, filename):
+    agents_dir = os.path.join(os.path.dirname(__file__), "agents")
+    path = os.path.join(agents_dir, filename)
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Agent module not found: {path}")
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-import requests
-from PIL import Image
-from io import BytesIO
+# Load all agents
+planner = load_agent_module("planner", "planner.py")
+researcher = load_agent_module("researcher", "researcher.py")
+critic = load_agent_module("critic", "critic.py")
+competitor = load_agent_module("competitor", "competitor_agent.py")
+report_writer = load_agent_module("report_writer", "report_writer.py")
 
-def download_wikipedia_image(topic, save_path="wiki_image.jpg"):
-    """
-    Downloads the first image from the Wikipedia page for the given topic.
-    Returns path if successful, else None.
-    """
-    from bs4 import BeautifulSoup
+if __name__ == "__main__":
+    raw_topic = input("📌 Enter your topic: ").strip()
 
+    # Step 1: Disambiguate
+    print("\n🧠 Disambiguating topic...")
+    topic = disambiguate_topic(raw_topic)
+    print(f"✅ Refined Topic: {topic}")
+
+    # Step 2: Plan subtopics
+    print("\n📍 Planning subtopics...")
+    subtopics = planner.plan_topic(topic)
+    print(f"✅ Subtopics:")
+    for i, s in enumerate(subtopics, 1):
+        print(f"   {i}. {s}")
+
+    # Step 3: Get introduction
+    print("\n📚 Fetching introduction from Wikipedia...")
     try:
-        url = f"https://en.wikipedia.org/wiki/{topic.replace(' ', '_')}"
-        response = requests.get(url)
-        if response.status_code != 200:
-            return None
+        intro = wikipedia.summary(topic, sentences=4, auto_suggest=True, redirect=True)
+    except Exception:
+        try:
+            intro = wikipedia.summary(f"{topic} (company)", sentences=4)
+        except Exception as e:
+            print(f"⚠️ Could not fetch intro from Wikipedia: {e}")
+            intro = f"This report explores various aspects of {topic}."
 
-        soup = BeautifulSoup(response.text, 'html.parser')
-        infobox = soup.find("table", {"class": "infobox"})
-        if not infobox:
-            return None
+    # Step 4: Research
+    print("\n🔍 Researching articles...")
+    articles = researcher.research_subtopics(subtopics)
+    print(f"✅ {len(articles)} articles found.")
 
-        img = infobox.find("img")
-        if not img:
-            return None
+    # Step 5: Validate claims
+    print("\n🧐 Validating claims with Gemini...")
+    verified_claims = critic.validate_claims(articles)
+    print(f"✅ {len(verified_claims)} claims validated.")
 
-        img_url = "https:" + img['src']
-        img_data = requests.get(img_url).content
-        with open(save_path, "wb") as f:
-            f.write(img_data)
+    # Step 6: Competitor analysis
+    print("\n🏢 Finding competitors...")
+    competitor_table = competitor.find_competitor_and_compare(topic)
 
-        return save_path
-    except Exception as e:
-        print(f"⚠️ Failed to download Wikipedia image: {e}")
-        return None
-
-
-
-def add_hyperlink(paragraph, url, text=None):
-    """
-    Adds a clickable hyperlink to a Word doc paragraph.
-    """
-    part = paragraph.part
-    r_id = part.relate_to(
-        url, "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink", is_external=True
+    # Step 7: Report generation
+    print("\n📝 Generating Word report...")
+    report_writer.generate_report_docx(
+        topic, intro, verified_claims, competitor_table
     )
 
-    hyperlink = OxmlElement("w:hyperlink")
-    hyperlink.set(qn("r:id"), r_id)
-
-    new_run = OxmlElement("w:r")
-    rPr = OxmlElement("w:rPr")
-    rStyle = OxmlElement("w:rStyle")
-    rStyle.set(qn("w:val"), "Hyperlink")
-    rPr.append(rStyle)
-    new_run.append(rPr)
-
-    text_run = OxmlElement("w:t")
-    text_run.text = text or url
-    new_run.append(text_run)
-    hyperlink.append(new_run)
-
-    paragraph._p.append(hyperlink)
-
-def generate_ai_conclusion(topic, verified_claims):
-    try:
-        summary_points = "\n".join([f"- {remove_bold_markdown(c['claim'])}" for c in verified_claims[:5]])
-        prompt = f"""Write a professional conclusion summarizing a research report on "{topic}".
-Include key insights based on the following claims:\n{summary_points}"""
-        resp = llm.generate_content(prompt)
-        return resp.text.strip()
-    except Exception as e:
-        print(f"⚠️ Gemini failed to generate conclusion: {e}")
-        return f"This report explores various aspects of {topic} and shows how AI can summarize complex topics into concise insights."
-
-def generate_report_docx(topic, intro, verified_claims, competitor_table="", filename="AI_Research_Report.docx"):
-    doc = Document()
-    doc.add_heading('AI Research Report', 0)
-    doc.add_paragraph(f"Topic: {topic}")
-    doc.add_paragraph(f"Date: {datetime.now().strftime('%B %d, %Y')}")
-    doc.add_page_break()
-
-    doc.add_heading('Introduction', level=1)
-    doc.add_paragraph(intro)
-        # 👉 Insert Wikipedia image if available
-    image_path = download_wikipedia_image(topic)
-    if image_path:
-        try:
-            from docx.shared import Inches  # Make sure this is already at the top
-            doc.add_picture(image_path, width=Inches(3.5))
-
-            last_paragraph = doc.paragraphs[-1]
-            last_paragraph.alignment = 1  # Center alignment
-        except Exception as e:
-            print(f"⚠️ Failed to insert image: {e}")
-            last_paragraph = doc.paragraphs[-1]
-            last_paragraph.alignment = 1  # Center alignment
-        except Exception as e:
-            print(f"⚠️ Failed to insert image: {e}")
-
-
-    doc.add_heading('Discussion / Main Sections', level=1)
-
-    reword_prefixes = [
-        "According to the article,",
-        "The author emphasizes that",
-        "The central idea conveyed is",
-        "This source asserts that",
-        "It is argued that",
-        "As highlighted in the article,",
-        "The article discusses how",
-        "The key point presented is",
-        "This report outlines that",
-        "One significant insight is that",
-        "The publication illustrates how",
-        "Research suggests that",
-        "It is emphasized that",
-        "The content underscores the fact that",
-        "The piece makes the case that"
-    ]
-
-    # Group by subtopic
-    grouped = {}
-    for claim in verified_claims:
-        grouped.setdefault(claim.get('subtopic', 'General'), []).append(claim)
-
-    for subtopic, claims in grouped.items():
-        # Subtopic heading
-        heading = doc.add_heading(level=2)
-        run = heading.add_run(remove_bold_markdown(subtopic))
-        run.font.size = Pt(14)
-
-        for c in claims:
-            cleaned = remove_bold_markdown(c['claim']).strip()
-
-            if cleaned.lower().startswith("the main claim of the article is that"):
-                trimmed = cleaned[len("the main claim of the article is that"):].strip()
-                prefix = random.choice(reword_prefixes)
-                final = f"{prefix} {trimmed[0].lower() + trimmed[1:]}"
-            else:
-                final = cleaned
-
-            para = doc.add_paragraph(style='List Bullet')
-            run = para.add_run(final)
-            run.font.size = Pt(11)
-
-            # Add hyperlink or fallback source
-            source_url = c.get("source_url", "").strip()
-            if source_url.lower().startswith("http"):
-                p = doc.add_paragraph()
-                add_hyperlink(p, source_url, "Source Link")
-            else:
-                fallback = doc.add_paragraph(f"Source: {source_url}", style='Intense Quote')
-                for r in fallback.runs:
-                    r.font.size = Pt(10)
-
-    # Competitor Section
-    doc.add_heading("Competitor Analysis", level=1)
-    doc.add_paragraph(competitor_table or "No competitor data found.")
-
-    # Conclusion Section
-    doc.add_heading("Conclusion", level=1)
-    ai_conclusion = generate_ai_conclusion(topic, verified_claims)
-    doc.add_paragraph(ai_conclusion)
-
-    # Save the file
-    doc.save(filename)
-    print(f"✅ Report saved as {filename}")
-    return filename
+    print("\n✅ All done! Report generated successfully.")
