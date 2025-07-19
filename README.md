@@ -46,5 +46,8 @@ Build an autonomous AI system that:
 
 # output : A word doucument with hyperlinks.
 
+**using gemini api** for the concultion ,makeing of sub-topic,validating the claims.
+**serper ai** for do web search the topic and subtopic.
+
 
 
