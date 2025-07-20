@@ -1,7 +1,14 @@
 # AI Research Report Generator
 
-
 An autonomous multi-agent research system that explores complex topics, gathers and validates claims from the web, and generates professional Word reports with clickable citations.
+
+**Problem Statement**
+Manual research for a topic takes a lot of time,prone to mistakes and frequently inconsistent, particularly when combining data from various online sources. Another level of complexity is added by check claims for accuracy and credibility. Scalability and reliability are limited by the absence of tools to automate end-to-end research, such as topic breakdown, content validation, and coherent report generation.
+By developing a multi-agent system that automates fact-checking, web research, and professional report creation, this project seeks to address that issue while guaranteeing transparency and reliability through verifiable citations.
+
+**Introduction**
+In today’s fast-paced digital world, people often rely on internet searches to gather information on complex topics. IN This project we use an  AI-powered autonomous research system capable of exploring complex topics, validating claims, and createing a professional reports.The entire system runs autonomously and uses technologies like the Gemini API for reasoning, Serper API for web search, and python-docx for document generation
+
 
 ##  Objective
 Build an autonomous AI system that:
@@ -50,4 +57,6 @@ Build an autonomous AI system that:
 **serper ai** for do web search the topic and subtopic find the valid links.(9f74a262b571fb746b74aff9103d4296e33b3e51)
 
 
+
+**FOR CHECK THE WORKING colab FILE LINK**(https://colab.research.google.com/drive/1GbKmRAIP-u4ZEwFFsIr8b2-Z5nInhuXK?usp=sharing) 
 
