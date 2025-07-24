@@ -1,9 +1,11 @@
-langchain
+streamlit
 openai
-requests
-beautifulsoup4
-newspaper3k
 google-generativeai
-python-dotenv
 requests
 beautifulsoup4
+python-docx
+Pillow
+wikipedia
+python-dotenv
+langchain
+langgraph
