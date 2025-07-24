@@ -9,7 +9,7 @@ wikipedia
 python-dotenv
 langchain
 langgraph
-newspaper3k
+beautifulsoup4
 lxml
 libxml2
 libxslt
