@@ -9,3 +9,8 @@ wikipedia
 python-dotenv
 langchain
 langgraph
+newspaper3k
+lxml
+libxml2
+libxslt
+
