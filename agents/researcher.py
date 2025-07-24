@@ -1,10 +1,13 @@
 import os
 import requests
-from newspaper import Article
+from bs4 import BeautifulSoup
 
 def search_web(query):
     url = "https://google.serper.dev/search"
-    headers = {"X-API-KEY": os.getenv("SERPER_API_KEY"), "Content-Type": "application/json"}
+    headers = {
+        "X-API-KEY": os.getenv("SERPER_API_KEY"),
+        "Content-Type": "application/json"
+    }
     data = {"q": query, "num": 1}
     resp = requests.post(url, headers=headers, json=data)
     res = resp.json()
@@ -16,10 +19,12 @@ def extract_article_text(url):
         headers = {'User-Agent': 'Mozilla/5.0'}
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
-        article = Article(url)
-        article.set_html(response.text)
-        article.parse()
-        return article.text
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        paragraphs = soup.find_all('p')
+        # Combine first few paragraphs for a summary
+        content = " ".join(p.get_text() for p in paragraphs[:6])
+        return content.strip()
     except Exception as e:
         print(f"❌ Error scraping {url}: {e}")
         return ""
@@ -32,5 +37,11 @@ def research_subtopics(subtopics):
         if url:
             print(f"✅ Found URL: {url}")
             content = extract_article_text(url)
-            articles.append({"subtopic": sub, "url": url, "content": content})
+            articles.append({
+                "subtopic": sub,
+                "url": url,
+                "content": content
+            })
+        else:
+            print(f"⚠️ No URL found for: {sub}")
     return articles
